@@ -2,19 +2,28 @@ import { Type } from '@fastify/type-provider-typebox';
 import { Post as PrismaPost, PrismaClient, Profile as PrismaProfile, User as PrismaUser } from '@prisma/client';
 import {
   GraphQLBoolean,
-  GraphQLEnumType,
   GraphQLFloat,
-  GraphQLInputObjectType,
-  GraphQLInt,
   GraphQLList,
   GraphQLNonNull,
   GraphQLObjectType,
   GraphQLSchema,
   GraphQLString
 } from 'graphql';
-import { UUIDType } from './types/uuid.js';
-import { getLoaders } from './loaders.js';
 import { parseResolveInfo, ResolveTree, simplifyParsedResolveInfoFragmentWithType } from 'graphql-parse-resolve-info';
+
+import { getLoaders } from './loaders.js';
+import { MemberType, MemberTypeId } from './types/member.js';
+import { Post } from './types/post.js';
+import { Profile } from './types/profile.js';
+import { UUIDType } from './types/uuid.js';
+import {
+  ChangePostInput,
+  ChangeProfileInput,
+  ChangeUserInput,
+  CreatePostInput,
+  CreateProfileInput,
+  CreateUserInput
+} from './types/input-types.js';
 
 export const gqlResponseSchema = Type.Partial(
   Type.Object({
@@ -37,39 +46,12 @@ export const createGqlResponseSchema = {
 
 export function getSchema(prisma: PrismaClient) {
   const {
-    memberTypeLoader,
     postsLoader,
     profileLoader,
     subscribedToUserLoader,
     userSubscribedToLoader,
     usersLoader,
   } = getLoaders(prisma);
-
-  const MemberTypeId = new GraphQLEnumType({
-    name: 'MemberTypeId',
-    values: {
-      BASIC: { value: 'BASIC' },
-      BUSINESS: { value: 'BUSINESS' },
-    },
-  });
-
-  const MemberType = new GraphQLObjectType({
-    name: 'MemberType',
-    fields: () => ({
-      id: { type: new GraphQLNonNull(MemberTypeId) },
-      discount: { type: GraphQLFloat },
-      postsLimitPerMonth: { type: GraphQLInt },
-    }),
-  });
-
-  const Post = new GraphQLObjectType({
-    name: 'Post',
-    fields: () => ({
-      id: { type: GraphQLString },
-      title: { type: GraphQLString },
-      content: { type: GraphQLString },
-    }),
-  });
 
   const User = new GraphQLObjectType({
     name: 'User',
@@ -133,21 +115,6 @@ export function getSchema(prisma: PrismaClient) {
           const subs = await subscribedToUserLoader.load(root.id);
 
           return usersLoader.loadMany(subs);
-        },
-      },
-    }),
-  });
-
-  const Profile = new GraphQLObjectType({
-    name: 'Profile',
-    fields: () => ({
-      id: { type: GraphQLString },
-      isMale: { type: GraphQLBoolean },
-      yearOfBirth: { type: GraphQLInt },
-      memberType: {
-        type: MemberType,
-        resolve(root: { memberTypeId: string }) {
-          return memberTypeLoader.load(root.memberTypeId);
         },
       },
     }),
@@ -267,54 +234,6 @@ export function getSchema(prisma: PrismaClient) {
         },
       },
     }),
-  });
-
-  const CreatePostInput = new GraphQLInputObjectType({
-    name: 'CreatePostInput',
-    fields: {
-      title: { type: GraphQLString },
-      content: { type: GraphQLString },
-      authorId: { type: UUIDType },
-    },
-  });
-
-  const CreateUserInput = new GraphQLInputObjectType({
-    name: 'CreateUserInput',
-    fields: {
-      name: { type: GraphQLString },
-      balance: { type: GraphQLFloat },
-    },
-  });
-
-  const CreateProfileInput = new GraphQLInputObjectType({
-    name: 'CreateProfileInput',
-    fields: {
-      isMale: { type: GraphQLBoolean },
-      yearOfBirth: { type: GraphQLInt },
-      userId: { type: UUIDType },
-      memberTypeId: { type: GraphQLString },
-    },
-  });
-
-  const ChangePostInput = new GraphQLInputObjectType({
-    name: 'ChangePostInput',
-    fields: {
-      title: { type: GraphQLString },
-    },
-  });
-
-  const ChangeProfileInput = new GraphQLInputObjectType({
-    name: 'ChangeProfileInput',
-    fields: {
-      isMale: { type: GraphQLBoolean },
-    },
-  });
-
-  const ChangeUserInput = new GraphQLInputObjectType({
-    name: 'ChangeUserInput',
-    fields: {
-      name: { type: GraphQLString },
-    },
   });
 
   const Mutations = new GraphQLObjectType({
