@@ -1,12 +1,11 @@
 import { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
-import { createGqlResponseSchema, getSchema, gqlResponseSchema } from './schemas.js';
-import { graphql, parse, validate } from 'graphql';
+import { graphql, GraphQLError, parse, validate } from 'graphql';
 import depthLimit from 'graphql-depth-limit';
+import { FastifyRequest } from 'fastify';
+import { getLoaders } from './loaders.js';
+import { createGqlResponseSchema, getSchema, gqlResponseSchema } from './schemas.js';
 
 const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
-  const { prisma } = fastify;
-  const schema = getSchema(prisma);
-
   fastify.route({
     url: '/',
     method: 'POST',
@@ -17,37 +16,43 @@ const plugin: FastifyPluginAsyncTypebox = async (fastify) => {
       },
     },
     async handler(req) {
+      const context = getContext(req, fastify);
       const { query, variables } = req.body;
       const document = parse(query);
-      const validationErrors = validate(schema, document, [depthLimit(5)]);
+      const validationErrors = validate(getSchema(this.prisma), document, [depthLimit(5)]);
 
       if (validationErrors.length > 0) {
         return {
-          data: null,
           errors: validationErrors,
         };
       }
 
       try {
         const result = await graphql({
-          schema: schema,
+          schema: getSchema(this.prisma),
           source: query,
           variableValues: variables,
-          contextValue: { prisma },
+          contextValue: context,
         });
 
-        return {
-          data: result.data,
-          errors: result.errors ?? null,
-        };
-      } catch (error) {
-        return {
-          data: null,
-          errors: [error],
-        };
+        return result;
+      } catch (error: any) {
+        console.error('GraphQL Execution Error:', error);
+        return { errors: [new GraphQLError(error.message)] };
       }
     },
   });
+
+  function getContext(_: FastifyRequest, fastify) {
+    const { prisma } = fastify;
+    const loaders = getLoaders(prisma);
+
+    return {
+      prisma,
+      loaders,
+      fastify,
+    };
+  }
 };
 
 export default plugin;
